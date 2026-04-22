@@ -1,6 +1,6 @@
-query_id,query_file_name,matched_audio_id,matched_file_name,matched_file_path,instrument_name,rank_position,similarity_score,distance_score
-1,guitar_57.wav,144,guitar_49.wav,data/dataset\guitar\guitar_49.wav,guitar,1,0.8537595272064209,4.9608635902404785
-1,guitar_57.wav,143,guitar_48.wav,data/dataset\guitar\guitar_48.wav,guitar,2,0.8457298278808594,5.183342456817627
-1,guitar_57.wav,146,guitar_50.wav,data/dataset\guitar\guitar_50.wav,guitar,3,0.8386616706848145,5.201686859130859
-1,guitar_57.wav,141,guitar_46.wav,data/dataset\guitar\guitar_46.wav,guitar,4,0.7990582585334778,5.79088830947876
-1,guitar_57.wav,139,guitar_44.wav,data/dataset\guitar\guitar_44.wav,guitar,5,0.7629755139350891,6.0616912841796875
+query_id,query_file_name,matched_audio_id,matched_file_name,matched_file_path,instrument_name,rank_position,similarity_score,distance_score,copied_wav_dir
+2,guitar_57.wav,144,guitar_49.wav,data/dataset\guitar\guitar_49.wav,guitar,1,0.8545751571655273,4.964346885681152,D:\Code\test\CSDLDPT\csdldpt_string_instrument\results\top5_wav\guitar_57
+2,guitar_57.wav,423,guitar_49.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\dataset\guitar\guitar_49.wav,guitar,2,0.8545751571655273,4.964346885681152,D:\Code\test\CSDLDPT\csdldpt_string_instrument\results\top5_wav\guitar_57
+2,guitar_57.wav,143,guitar_48.wav,data/dataset\guitar\guitar_48.wav,guitar,3,0.8463206887245178,5.190458297729492,D:\Code\test\CSDLDPT\csdldpt_string_instrument\results\top5_wav\guitar_57
+2,guitar_57.wav,422,guitar_48.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\dataset\guitar\guitar_48.wav,guitar,4,0.8463206887245178,5.190458297729492,D:\Code\test\CSDLDPT\csdldpt_string_instrument\results\top5_wav\guitar_57
+2,guitar_57.wav,146,guitar_50.wav,data/dataset\guitar\guitar_50.wav,guitar,5,0.8392705917358398,5.209590911865234,D:\Code\test\CSDLDPT\csdldpt_string_instrument\results\top5_wav\guitar_57
