@@ -8,11 +8,11 @@ from mysql.connector import Error
 class DatabaseManager:
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 3306,
-        user: str = "root",
-        password: str = "",
-        database: str = "string_instrument_search",
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
     ) -> None:
         self.config = {
             "host": host,

@@ -1,32 +1,25 @@
 import os
+import shutil
 import sys
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(BASE_DIR)
 
+from src.config import DB_CONFIG, QUERY_ROOT, TOP5_RESULTS_CSV, TOP5_WAV_DIR
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
 from src.retrieval import print_top_results, rank_similar_files
-from src.utils import get_file_name, list_audio_files, print_section, save_dicts_to_csv
+from src.utils import ensure_folder_exists, get_file_name, list_audio_files, print_section, save_dicts_to_csv
 
 
-QUERY_ROOT = "data/query"
-OUTPUT_CSV = "results/top5_results.csv"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "123456",
-    "database": "string_instrument_search",
-}
-
-SIMILARITY_METHOD = "cosine"   # "cosine" hoặc "euclidean"
-NORMALIZE_METHOD = "zscore"    # "zscore", "minmax", hoặc None
+SIMILARITY_METHOD = "cosine"
+NORMALIZE_METHOD = "zscore"
 TOP_K = 5
 
 
 def choose_query_file() -> str:
-    query_files = list_audio_files(QUERY_ROOT)
+    query_files = list_audio_files(str(QUERY_ROOT))
 
     if not query_files:
         raise FileNotFoundError(f"No .wav files found in: {QUERY_ROOT}")
@@ -46,6 +39,28 @@ def choose_query_file() -> str:
             return query_files[idx - 1]
 
         print("Choice out of range.")
+
+
+def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
+    query_stem = Path(query_file_name).stem
+    output_dir = TOP5_WAV_DIR / query_stem
+    ensure_folder_exists(str(output_dir))
+
+    for old_file in output_dir.glob("*.wav"):
+        old_file.unlink()
+
+    for item in top_results:
+        src = Path(item["file_path"])
+        if not src.exists():
+            print(f"Warning: source wav not found, skip copy: {src}")
+            continue
+
+        safe_name = src.name
+        dest_name = f"rank_{item['rank_position']}_{safe_name}"
+        dest = output_dir / dest_name
+        shutil.copy2(src, dest)
+
+    return str(output_dir)
 
 
 def main() -> None:
@@ -99,6 +114,7 @@ def main() -> None:
         )
 
         db.insert_search_results(query_id, top_results)
+        copied_dir = copy_top_result_wavs(query_file_name, top_results)
 
         exported_rows = []
         for item in top_results:
@@ -112,13 +128,15 @@ def main() -> None:
                 "rank_position": item["rank_position"],
                 "similarity_score": item["similarity_score"],
                 "distance_score": item["distance_score"],
+                "copied_wav_dir": copied_dir,
             })
 
-        save_dicts_to_csv(exported_rows, OUTPUT_CSV)
+        save_dicts_to_csv(exported_rows, str(TOP5_RESULTS_CSV))
 
         print_section("DONE")
         print(f"Top-{TOP_K} results saved to database.")
-        print(f"CSV result saved to: {OUTPUT_CSV}")
+        print(f"CSV result saved to: {TOP5_RESULTS_CSV}")
+        print(f"Top-{TOP_K} wav files copied to: {copied_dir}")
 
     finally:
         db.close()

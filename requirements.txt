@@ -1,9 +1,7 @@
-numpy<2
-scipy
-soundfile
+numpy==1.26.4
+scipy==1.11.4
+librosa==0.10.2.post1
+soundfile==0.12.1
 mysql-connector-python
 pandas
 scikit-learn
-librosa==0.10.2.post1
-numba==0.58.1
-llvmlite==0.41.1

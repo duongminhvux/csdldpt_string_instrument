@@ -1,8 +1,10 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(BASE_DIR)
 
+from src.config import DATASET_ROOT, DB_CONFIG, FEATURES_CSV
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
 from src.utils import (
@@ -14,22 +16,11 @@ from src.utils import (
 )
 
 
-DATASET_ROOT = "data/dataset"
-OUTPUT_CSV = "results/features.csv"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "123456",
-    "database": "string_instrument_search",
-}
-
-
 def main() -> None:
     print_section("BUILD DATASET FEATURES")
+    print(f"Dataset root: {DATASET_ROOT}")
 
-    audio_files = list_audio_files(DATASET_ROOT)
+    audio_files = list_audio_files(str(DATASET_ROOT))
     if not audio_files:
         print(f"No .wav files found in: {DATASET_ROOT}")
         return
@@ -42,7 +33,7 @@ def main() -> None:
     try:
         for idx, file_path in enumerate(audio_files, start=1):
             file_name = get_file_name(file_path)
-            instrument_name = get_instrument_name_from_path(file_path, DATASET_ROOT)
+            instrument_name = get_instrument_name_from_path(file_path, str(DATASET_ROOT))
 
             print(f"[{idx}/{len(audio_files)}] Processing: {file_name} | instrument={instrument_name}")
 
@@ -75,11 +66,11 @@ def main() -> None:
             }
             exported_rows.append(row)
 
-        save_dicts_to_csv(exported_rows, OUTPUT_CSV)
+        save_dicts_to_csv(exported_rows, str(FEATURES_CSV))
 
         print_section("DONE")
         print(f"Inserted {len(audio_files)} dataset files into MySQL.")
-        print(f"Feature backup saved to: {OUTPUT_CSV}")
+        print(f"Feature backup saved to: {FEATURES_CSV}")
 
     finally:
         db.close()

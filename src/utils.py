@@ -1,11 +1,3 @@
-"""Shared helper functions."""
-
-from pathlib import Path
-
-
-def list_wav_files(root_dir: str):
-    root = Path(root_dir)
-    return sorted(str(p) for p in root.rglob("*.wav"))
 import csv
 import os
 from typing import Dict, List, Optional
@@ -33,7 +25,7 @@ def get_instrument_name_from_path(file_path: str, dataset_root: str = "data/data
     if len(parts) < 2:
         return None
 
-    return parts[0]
+    return parts[0].lower()
 
 
 def list_audio_files(root_folder: str) -> List[str]:
@@ -49,7 +41,8 @@ def list_audio_files(root_folder: str) -> List[str]:
 
 
 def ensure_folder_exists(folder_path: str) -> None:
-    os.makedirs(folder_path, exist_ok=True)
+    if folder_path:
+        os.makedirs(folder_path, exist_ok=True)
 
 
 def save_dicts_to_csv(rows: List[Dict], output_file: str) -> None:
