@@ -1,5 +1,9 @@
-librosa
-numpy
-pandas
+numpy<2
+scipy
+soundfile
 mysql-connector-python
+pandas
 scikit-learn
+librosa==0.10.2.post1
+numba==0.58.1
+llvmlite==0.41.1
