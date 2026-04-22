@@ -1,5 +1,6 @@
 import csv
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
 
 
@@ -72,3 +73,10 @@ def safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def find_file_in_flat_folder(file_name: str, folder_path: str) -> Optional[str]:
+    candidate = Path(folder_path) / file_name
+    if candidate.exists() and candidate.is_file():
+        return str(candidate)
+    return None

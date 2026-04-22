@@ -6,11 +6,18 @@ from pathlib import Path
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 
-from src.config import DB_CONFIG, QUERY_ROOT, TOP5_RESULTS_CSV, TOP5_WAV_DIR
+from src.config import DATA_ALL_ROOT, DB_CONFIG, QUERY_ROOT, TOP5_RESULTS_CSV, TOP5_WAV_DIR
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
 from src.retrieval import print_top_results, rank_similar_files
-from src.utils import ensure_folder_exists, get_file_name, list_audio_files, print_section, save_dicts_to_csv
+from src.utils import (
+    ensure_folder_exists,
+    find_file_in_flat_folder,
+    get_file_name,
+    list_audio_files,
+    print_section,
+    save_dicts_to_csv,
+)
 
 
 SIMILARITY_METHOD = "cosine"
@@ -50,13 +57,15 @@ def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
         old_file.unlink()
 
     for item in top_results:
-        src = Path(item["file_path"])
-        if not src.exists():
-            print(f"Warning: source wav not found, skip copy: {src}")
+        matched_file_name = item["file_name"]
+        src_path = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
+
+        if src_path is None:
+            print(f"Warning: file not found in data_all, skip copy: {matched_file_name}")
             continue
 
-        safe_name = src.name
-        dest_name = f"rank_{item['rank_position']}_{safe_name}"
+        src = Path(src_path)
+        dest_name = f"rank_{item['rank_position']}_{src.name}"
         dest = output_dir / dest_name
         shutil.copy2(src, dest)
 
@@ -65,6 +74,8 @@ def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
 
 def main() -> None:
     print_section("RUN AUDIO QUERY")
+    print(f"Query root: {QUERY_ROOT}")
+    print(f"Data all root: {DATA_ALL_ROOT}")
 
     query_file_path = choose_query_file()
     query_file_name = get_file_name(query_file_path)
@@ -118,12 +129,16 @@ def main() -> None:
 
         exported_rows = []
         for item in top_results:
+            matched_file_name = item["file_name"]
+            copied_source = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
+
             exported_rows.append({
                 "query_id": query_id,
                 "query_file_name": query_file_name,
                 "matched_audio_id": item["matched_audio_id"],
-                "matched_file_name": item["file_name"],
-                "matched_file_path": item["file_path"],
+                "matched_file_name": matched_file_name,
+                "matched_file_path_in_db": item["file_path"],
+                "matched_file_path_in_data_all": copied_source,
                 "instrument_name": item.get("instrument_name"),
                 "rank_position": item["rank_position"],
                 "similarity_score": item["similarity_score"],
@@ -136,7 +151,7 @@ def main() -> None:
         print_section("DONE")
         print(f"Top-{TOP_K} results saved to database.")
         print(f"CSV result saved to: {TOP5_RESULTS_CSV}")
-        print(f"Top-{TOP_K} wav files copied to: {copied_dir}")
+        print(f"Top-{TOP_K} wav files copied from data_all to: {copied_dir}")
 
     finally:
         db.close()

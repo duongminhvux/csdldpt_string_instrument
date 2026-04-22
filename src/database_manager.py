@@ -72,6 +72,65 @@ class DatabaseManager:
         finally:
             cursor.close()
 
+    def clear_dataset_data(self) -> None:
+        self._ensure_connection()
+
+        cursor = self.connection.cursor()
+        try:
+            # Xóa search_results của các query liên quan tới file query
+            cursor.execute("""
+                DELETE sr
+                FROM search_results sr
+                INNER JOIN search_queries sq ON sr.query_id = sq.query_id
+            """)
+
+            # Xóa toàn bộ lịch sử query
+            cursor.execute("DELETE FROM search_queries")
+
+            # Xóa feature của các file dataset
+            cursor.execute("""
+                DELETE afeat
+                FROM audio_features afeat
+                INNER JOIN audio_files afile ON afeat.audio_id = afile.audio_id
+                WHERE afile.dataset_type = 'dataset'
+            """)
+
+            # Xóa metadata của các file dataset
+            cursor.execute("""
+                DELETE FROM audio_files
+                WHERE dataset_type = 'dataset'
+            """)
+
+            self.connection.commit()
+            print("Old dataset data cleared successfully.")
+
+        except Error as e:
+            self.connection.rollback()
+            print(f"Error clearing dataset data: {e}")
+            raise
+        finally:
+            cursor.close()
+
+
+    def reset_auto_increment_for_clean_build(self) -> None:
+        self._ensure_connection()
+
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute("ALTER TABLE search_results AUTO_INCREMENT = 1")
+            cursor.execute("ALTER TABLE search_queries AUTO_INCREMENT = 1")
+            cursor.execute("ALTER TABLE audio_features AUTO_INCREMENT = 1")
+            cursor.execute("ALTER TABLE audio_files AUTO_INCREMENT = 1")
+            self.connection.commit()
+            print("AUTO_INCREMENT values reset successfully.")
+
+        except Error as e:
+            self.connection.rollback()
+            print(f"Error resetting AUTO_INCREMENT: {e}")
+            raise
+        finally:
+            cursor.close()
+
     def get_instrument_id(self, instrument_name: str) -> Optional[int]:
         query = """
             SELECT instrument_id

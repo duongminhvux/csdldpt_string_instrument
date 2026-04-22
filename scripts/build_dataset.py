@@ -16,6 +16,19 @@ from src.utils import (
 )
 
 
+OUTPUT_CSV = str(FEATURES_CSV)
+
+
+def ask_clear_old_data() -> bool:
+    while True:
+        choice = input("Clear old dataset data first? (y/n): ").strip().lower()
+        if choice in {"y", "yes"}:
+            return True
+        if choice in {"n", "no"}:
+            return False
+        print("Please enter y or n.")
+
+
 def main() -> None:
     print_section("BUILD DATASET FEATURES")
     print(f"Dataset root: {DATASET_ROOT}")
@@ -28,9 +41,14 @@ def main() -> None:
     db = DatabaseManager(**DB_CONFIG)
     db.connect()
 
-    exported_rows = []
-
     try:
+        if ask_clear_old_data():
+            print_section("CLEARING OLD DATA")
+            db.clear_dataset_data()
+            db.reset_auto_increment_for_clean_build()
+
+        exported_rows = []
+
         for idx, file_path in enumerate(audio_files, start=1):
             file_name = get_file_name(file_path)
             instrument_name = get_instrument_name_from_path(file_path, str(DATASET_ROOT))
@@ -66,11 +84,11 @@ def main() -> None:
             }
             exported_rows.append(row)
 
-        save_dicts_to_csv(exported_rows, str(FEATURES_CSV))
+        save_dicts_to_csv(exported_rows, OUTPUT_CSV)
 
         print_section("DONE")
         print(f"Inserted {len(audio_files)} dataset files into MySQL.")
-        print(f"Feature backup saved to: {FEATURES_CSV}")
+        print(f"Feature backup saved to: {OUTPUT_CSV}")
 
     finally:
         db.close()
