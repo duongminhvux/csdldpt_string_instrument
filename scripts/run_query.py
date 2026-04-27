@@ -20,7 +20,7 @@ from src.utils import (
 )
 
 
-SIMILARITY_METHOD = "cosine"
+SIMILARITY_METHOD = "euclidean"  # or "cosine" fix herere nếu muốn đổi method so sánh, nhớ đổi cả trong phần lưu vào database nhé
 NORMALIZE_METHOD = "zscore"
 TOP_K = 5
 
