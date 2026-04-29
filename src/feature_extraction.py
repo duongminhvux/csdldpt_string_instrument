@@ -23,6 +23,7 @@ def trim_silence(y: np.ndarray, top_db: int = 20) -> np.ndarray:
         return np.array([], dtype=np.float32)
 
     yt, _ = librosa.effects.trim(y, top_db=top_db)
+
     if yt is None or len(yt) == 0:
         return y
 
@@ -34,6 +35,7 @@ def normalize_audio(y: np.ndarray) -> np.ndarray:
         return np.array([], dtype=np.float32)
 
     max_val = np.max(np.abs(y))
+
     if max_val == 0:
         return y
 
@@ -59,20 +61,24 @@ def estimate_attack_time(y: np.ndarray, sr: int, hop_length: int = DEFAULT_HOP_L
         return 0.0
 
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+
     if len(rms) == 0:
         return 0.0
 
     peak = np.max(rms)
+
     if peak <= 0:
         return 0.0
 
     threshold = 0.9 * peak
     onset_frames = np.where(rms >= threshold)[0]
+
     if len(onset_frames) == 0:
         return 0.0
 
     attack_frame = int(onset_frames[0])
     attack_time = librosa.frames_to_time(attack_frame, sr=sr, hop_length=hop_length)
+
     return float(attack_time)
 
 
@@ -91,16 +97,19 @@ def estimate_pitch(y: np.ndarray, sr: int) -> Tuple[float, float]:
             return 0.0, 0.0
 
         valid_f0 = f0[~np.isnan(f0)]
+
         if len(valid_f0) == 0:
             return 0.0, 0.0
 
         return float(np.mean(valid_f0)), float(np.std(valid_f0))
+
     except Exception:
         return 0.0, 0.0
 
 
 def get_basic_metadata(file_path: str) -> Dict[str, float]:
     info = sf.info(file_path)
+
     return {
         "duration_seconds": float(info.duration),
         "sample_rate": int(info.samplerate),
@@ -116,12 +125,16 @@ def extract_bit_depth(subtype: str) -> int:
 
     if "PCM_16" in subtype:
         return 16
+
     if "PCM_24" in subtype:
         return 24
+
     if "PCM_32" in subtype:
         return 32
+
     if "PCM_U8" in subtype or "PCM_S8" in subtype:
         return 8
+
     if "FLOAT" in subtype:
         return 32
 
@@ -136,6 +149,10 @@ def summarize_feature(values: np.ndarray) -> Tuple[float, float]:
 
 
 def build_empty_features() -> Dict[str, float]:
+    """
+    Ham nay van giu day du 51 dac trung de insert vao DB khong bi loi.
+    Khong dung ham nay de quyet dinh vector so sanh.
+    """
     features: Dict[str, float] = {
         "rms_mean": 0.0,
         "rms_std": 0.0,
@@ -164,6 +181,7 @@ def build_empty_features() -> Dict[str, float]:
 
 def extract_features(file_path: str) -> Dict[str, float]:
     y, sr = load_audio(file_path)
+
     y = trim_silence(y)
     y = normalize_audio(y)
 
@@ -176,7 +194,12 @@ def extract_features(file_path: str) -> Dict[str, float]:
 
     # Time / energy features
     rms = librosa.feature.rms(y=y, frame_length=n_fft, hop_length=hop_length)[0]
-    zcr = librosa.feature.zero_crossing_rate(y, frame_length=n_fft, hop_length=hop_length)[0]
+    zcr = librosa.feature.zero_crossing_rate(
+        y,
+        frame_length=n_fft,
+        hop_length=hop_length,
+    )[0]
+
     attack_time = estimate_attack_time(y, sr, hop_length=hop_length)
 
     features["rms_mean"], features["rms_std"] = summarize_feature(rms)
@@ -205,10 +228,17 @@ def extract_features(file_path: str) -> Dict[str, float]:
         hop_length=hop_length,
     )[0]
 
-    features["spectral_centroid_mean"], features["spectral_centroid_std"] = summarize_feature(spectral_centroid)
-    features["spectral_bandwidth_mean"], features["spectral_bandwidth_std"] = summarize_feature(spectral_bandwidth)
-    features["spectral_rolloff_mean"], features["spectral_rolloff_std"] = summarize_feature(spectral_rolloff)
+    features["spectral_centroid_mean"], features["spectral_centroid_std"] = summarize_feature(
+        spectral_centroid
+    )
+    features["spectral_bandwidth_mean"], features["spectral_bandwidth_std"] = summarize_feature(
+        spectral_bandwidth
+    )
+    features["spectral_rolloff_mean"], features["spectral_rolloff_std"] = summarize_feature(
+        spectral_rolloff
+    )
 
+    # Pitch van trich va luu DB, nhung khong dua vao vector so sanh
     pitch_mean, pitch_std = estimate_pitch(y, sr)
     features["pitch_mean"] = pitch_mean
     features["pitch_std"] = pitch_std
@@ -224,9 +254,9 @@ def extract_features(file_path: str) -> Dict[str, float]:
 
     for i in range(N_MFCC):
         coeff = mfcc[i]
-        features[f"mfcc_{i+1}_mean"], features[f"mfcc_{i+1}_std"] = summarize_feature(coeff)
+        features[f"mfcc_{i + 1}_mean"], features[f"mfcc_{i + 1}_std"] = summarize_feature(coeff)
 
-    # Chroma
+    # Chroma van trich va luu DB, nhung khong dua vao vector so sanh
     chroma = librosa.feature.chroma_stft(
         y=y,
         sr=sr,
@@ -237,20 +267,33 @@ def extract_features(file_path: str) -> Dict[str, float]:
 
     for i in range(N_CHROMA):
         chroma_band = chroma[i]
-        features[f"chroma_{i+1}_mean"] = float(np.mean(chroma_band)) if len(chroma_band) > 0 else 0.0
+        features[f"chroma_{i + 1}_mean"] = float(np.mean(chroma_band)) if len(chroma_band) > 0 else 0.0
 
     return features
 
 
-def build_feature_vector(features: Dict[str, float]) -> np.ndarray:
+def get_similarity_feature_keys() -> list[str]:
+    """
+    Danh sach dac trung dung de build vector so sanh.
+    Chot vector 31 chieu:
+    - 5 dac trung tong quat
+    - 13 MFCC mean
+    - 13 MFCC std
+
+    Bo khoi vector:
+    - rms_std
+    - zcr_std
+    - attack_time
+    - spectral_*_std
+    - pitch_mean, pitch_std
+    - chroma_1_mean -> chroma_12_mean
+    """
     ordered_keys = [
-        "rms_mean", "rms_std",
-        "zcr_mean", "zcr_std",
-        "attack_time",
-        "spectral_centroid_mean", "spectral_centroid_std",
-        "spectral_bandwidth_mean", "spectral_bandwidth_std",
-        "spectral_rolloff_mean", "spectral_rolloff_std",
-        "pitch_mean", "pitch_std",
+        "rms_mean",
+        "zcr_mean",
+        "spectral_centroid_mean",
+        "spectral_bandwidth_mean",
+        "spectral_rolloff_mean",
     ]
 
     for i in range(1, N_MFCC + 1):
@@ -259,10 +302,13 @@ def build_feature_vector(features: Dict[str, float]) -> np.ndarray:
     for i in range(1, N_MFCC + 1):
         ordered_keys.append(f"mfcc_{i}_std")
 
-    for i in range(1, N_CHROMA + 1):
-        ordered_keys.append(f"chroma_{i}_mean")
+    return ordered_keys
 
+
+def build_feature_vector(features: Dict[str, float]) -> np.ndarray:
+    ordered_keys = get_similarity_feature_keys()
     vector = np.array([features.get(k, 0.0) for k in ordered_keys], dtype=np.float32)
+
     return vector
 
 

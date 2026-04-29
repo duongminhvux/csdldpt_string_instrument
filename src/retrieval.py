@@ -1,5 +1,9 @@
-import numpy as np
 from typing import Any, Dict, List, Tuple
+
+import numpy as np
+
+
+N_MFCC = 13
 
 
 def cosine_similarity(query_vector: np.ndarray, dataset_vector: np.ndarray) -> float:
@@ -10,6 +14,7 @@ def cosine_similarity(query_vector: np.ndarray, dataset_vector: np.ndarray) -> f
         return 0.0
 
     similarity = np.dot(query_vector, dataset_vector) / (query_norm * dataset_norm)
+
     return float(similarity)
 
 
@@ -19,7 +24,7 @@ def euclidean_distance(query_vector: np.ndarray, dataset_vector: np.ndarray) -> 
 
 def min_max_normalize(
     query_vector: np.ndarray,
-    dataset_matrix: np.ndarray
+    dataset_matrix: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
     combined = np.vstack([query_vector, dataset_matrix])
 
@@ -39,12 +44,13 @@ def min_max_normalize(
 
 def z_score_normalize(
     query_vector: np.ndarray,
-    dataset_matrix: np.ndarray
+    dataset_matrix: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
     combined = np.vstack([query_vector, dataset_matrix])
 
     means = np.mean(combined, axis=0)
     stds = np.std(combined, axis=0)
+
     stds[stds == 0] = 1.0
 
     normalized = (combined - means) / stds
@@ -55,25 +61,41 @@ def z_score_normalize(
     return normalized_query, normalized_dataset
 
 
-def build_vector_from_db_row(row: Dict[str, Any]) -> np.ndarray:
+def get_similarity_feature_keys() -> list[str]:
+    """
+    Danh sach dac trung dung de build vector so sanh tu DB.
+    Phai khop voi get_similarity_feature_keys() trong feature_extraction.py.
+
+    Vector 31 chieu:
+    - rms_mean
+    - zcr_mean
+    - spectral_centroid_mean
+    - spectral_bandwidth_mean
+    - spectral_rolloff_mean
+    - mfcc_1_mean -> mfcc_13_mean
+    - mfcc_1_std  -> mfcc_13_std
+    """
     ordered_keys = [
-        "rms_mean", "rms_std",
-        "zcr_mean", "zcr_std",
-        "attack_time",
-        "spectral_centroid_mean", "spectral_centroid_std",
-        "spectral_bandwidth_mean", "spectral_bandwidth_std",
-        "spectral_rolloff_mean", "spectral_rolloff_std",
-        "pitch_mean", "pitch_std",
+        "rms_mean",
+        "zcr_mean",
+        "spectral_centroid_mean",
+        "spectral_bandwidth_mean",
+        "spectral_rolloff_mean",
     ]
 
-    for i in range(1, 14):
+    for i in range(1, N_MFCC + 1):
         ordered_keys.append(f"mfcc_{i}_mean")
-    for i in range(1, 14):
-        ordered_keys.append(f"mfcc_{i}_std")
-    for i in range(1, 13):
-        ordered_keys.append(f"chroma_{i}_mean")
 
+    for i in range(1, N_MFCC + 1):
+        ordered_keys.append(f"mfcc_{i}_std")
+
+    return ordered_keys
+
+
+def build_vector_from_db_row(row: Dict[str, Any]) -> np.ndarray:
+    ordered_keys = get_similarity_feature_keys()
     vector = np.array([row.get(k, 0.0) or 0.0 for k in ordered_keys], dtype=np.float32)
+
     return vector
 
 
@@ -82,12 +104,15 @@ def rank_similar_files(
     dataset_rows: List[Dict[str, Any]],
     method: str = "cosine",
     normalize: str = "zscore",
-    top_k: int = 5
+    top_k: int = 5,
 ) -> List[Dict[str, Any]]:
     if len(dataset_rows) == 0:
         return []
 
-    dataset_vectors = np.array([build_vector_from_db_row(row) for row in dataset_rows], dtype=np.float32)
+    dataset_vectors = np.array(
+        [build_vector_from_db_row(row) for row in dataset_rows],
+        dtype=np.float32,
+    )
 
     if normalize == "minmax":
         norm_query, norm_dataset = min_max_normalize(query_vector, dataset_vectors)
@@ -108,14 +133,16 @@ def rank_similar_files(
             similarity = cosine_similarity(norm_query, dataset_vector)
             distance = euclidean_distance(norm_query, dataset_vector)
 
-        results.append({
-            "matched_audio_id": row["audio_id"],
-            "file_name": row["file_name"],
-            "file_path": row["file_path"],
-            "instrument_name": row.get("instrument_name"),
-            "similarity_score": float(similarity),
-            "distance_score": float(distance),
-        })
+        results.append(
+            {
+                "matched_audio_id": row["audio_id"],
+                "file_name": row["file_name"],
+                "file_path": row["file_path"],
+                "instrument_name": row.get("instrument_name"),
+                "similarity_score": float(similarity),
+                "distance_score": float(distance),
+            }
+        )
 
     if method == "euclidean":
         results.sort(key=lambda x: x["distance_score"])
@@ -137,6 +164,7 @@ def print_top_results(results: List[Dict[str, Any]]) -> None:
 
     print("\nTop matching files:")
     print("-" * 90)
+
     for item in results:
         print(
             f"Rank {item['rank_position']}: "
@@ -145,4 +173,5 @@ def print_top_results(results: List[Dict[str, Any]]) -> None:
             f"Similarity: {item['similarity_score']:.6f} | "
             f"Distance: {item['distance_score']:.6f}"
         )
+
     print("-" * 90)
