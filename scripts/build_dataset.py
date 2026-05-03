@@ -22,32 +22,37 @@ OUTPUT_CSV = str(FEATURES_CSV)
 def ask_clear_old_data() -> bool:
     while True:
         choice = input("Clear old dataset data first? (y/n): ").strip().lower()
+
         if choice in {"y", "yes"}:
             return True
+
         if choice in {"n", "no"}:
             return False
+
         print("Please enter y or n.")
 
 
-def main() -> None:
-    print_section("BUILD DATASET FEATURES")
-    print(f"Dataset root: {DATASET_ROOT}")
-
+def build_dataset(clear_old_data: bool = True) -> dict:
     audio_files = list_audio_files(str(DATASET_ROOT))
+
     if not audio_files:
-        print(f"No .wav files found in: {DATASET_ROOT}")
-        return
+        return {
+            "success": False,
+            "message": f"No .wav files found in: {DATASET_ROOT}",
+            "audio_count": 0,
+            "frame_count": 0,
+            "csv_path": str(FEATURES_CSV),
+        }
 
     db = DatabaseManager(**DB_CONFIG)
     db.connect()
 
+    exported_rows = []
+
     try:
-        if ask_clear_old_data():
-            print_section("CLEARING OLD DATA")
+        if clear_old_data:
             db.clear_dataset_data()
             db.reset_auto_increment_for_clean_build()
-
-        exported_rows = []
 
         for idx, file_path in enumerate(audio_files, start=1):
             file_name = get_file_name(file_path)
@@ -56,8 +61,9 @@ def main() -> None:
             print(f"[{idx}/{len(audio_files)}] Processing: {file_name} | instrument={instrument_name}")
 
             result = extract_all(file_path)
+
             metadata = result["metadata"]
-            features = result["features"]
+            frame_features = result["frame_features"]
 
             audio_id = db.insert_audio_file(
                 file_name=file_name,
@@ -72,26 +78,47 @@ def main() -> None:
                 file_format=metadata.get("file_format", "wav"),
             )
 
-            db.insert_audio_features(audio_id, features)
+            db.insert_audio_features(audio_id, frame_features)
 
-            row = {
-                "audio_id": audio_id,
-                "file_name": file_name,
-                "file_path": file_path,
-                "instrument_name": instrument_name,
-                **metadata,
-                **features,
-            }
-            exported_rows.append(row)
+            for frame in frame_features:
+                exported_rows.append({
+                    "audio_id": audio_id,
+                    "file_name": file_name,
+                    "file_path": file_path,
+                    "instrument_name": instrument_name,
+                    **metadata,
+                    **frame,
+                })
 
         save_dicts_to_csv(exported_rows, OUTPUT_CSV)
 
-        print_section("DONE")
-        print(f"Inserted {len(audio_files)} dataset files into MySQL.")
-        print(f"Feature backup saved to: {OUTPUT_CSV}")
+        return {
+            "success": True,
+            "message": "Build dataset successfully.",
+            "audio_count": len(audio_files),
+            "frame_count": len(exported_rows),
+            "csv_path": OUTPUT_CSV,
+        }
 
     finally:
         db.close()
+
+
+def main() -> None:
+    print_section("BUILD DATASET FRAME FEATURES")
+    print(f"Dataset root: {DATASET_ROOT}")
+
+    clear_old_data = ask_clear_old_data()
+    result = build_dataset(clear_old_data=clear_old_data)
+
+    print_section("DONE")
+
+    if result["success"]:
+        print(f"Inserted {result['audio_count']} dataset files into MySQL.")
+        print(f"Inserted {result['frame_count']} frame feature rows.")
+        print(f"Feature backup saved to: {result['csv_path']}")
+    else:
+        print(result["message"])
 
 
 if __name__ == "__main__":
