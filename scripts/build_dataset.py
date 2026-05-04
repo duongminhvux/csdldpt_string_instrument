@@ -1,10 +1,11 @@
 import os
 import sys
+from pathlib import Path
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 
-from src.config import DATASET_ROOT, DB_CONFIG, FEATURES_CSV
+from src.config import DATASET_ROOT, DATA_ALL_ROOT, QUERY_ROOT, RESULTS_DIR, TOP5_WAV_DIR, DB_CONFIG, FEATURES_CSV
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
 from src.utils import (
@@ -17,6 +18,16 @@ from src.utils import (
 
 
 OUTPUT_CSV = str(FEATURES_CSV)
+
+def ensure_project_folders() -> None:
+    for folder in [
+        DATA_ALL_ROOT,
+        DATASET_ROOT,
+        QUERY_ROOT,
+        RESULTS_DIR,
+        TOP5_WAV_DIR,
+    ]:
+        Path(folder).mkdir(parents=True, exist_ok=True)
 
 
 def ask_clear_old_data() -> bool:
@@ -33,6 +44,7 @@ def ask_clear_old_data() -> bool:
 
 
 def build_dataset(clear_old_data: bool = True) -> dict:
+    ensure_project_folders()
     audio_files = list_audio_files(str(DATASET_ROOT))
 
     if not audio_files:

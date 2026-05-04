@@ -11,7 +11,7 @@ sys.path.append(str(BASE_DIR))
 
 from copy_data import copy_data_all_to_dataset
 from scripts.build_dataset import build_dataset
-from src.config import DATA_ALL_ROOT, DB_CONFIG, QUERY_ROOT, TOP5_RESULTS_CSV, TOP5_WAV_DIR
+from src.config import DATA_ALL_ROOT, DATASET_ROOT, DB_CONFIG, QUERY_ROOT, RESULTS_DIR, TOP5_RESULTS_CSV, TOP5_WAV_DIR
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
 from src.retrieval import rank_similar_files, vote_instrument_by_nearest_frame
@@ -19,6 +19,16 @@ from src.utils import ensure_folder_exists, find_file_in_flat_folder, save_dicts
 
 
 TOP_K = 5
+
+def ensure_project_folders() -> None:
+    for folder in [
+        DATA_ALL_ROOT,
+        DATASET_ROOT,
+        QUERY_ROOT,
+        RESULTS_DIR,
+        TOP5_WAV_DIR,
+    ]:
+        Path(folder).mkdir(parents=True, exist_ok=True)
 
 
 def save_uploaded_query_file(uploaded_file) -> Path:
@@ -61,31 +71,15 @@ def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
 
 
 def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
+    query_result = extract_all(str(query_file_path))
+
+    query_frame_features = query_result["frame_features"]
+    query_frame_vectors = query_result["feature_vectors"]
+
     db = DatabaseManager(**DB_CONFIG)
     db.connect()
 
     try:
-        query_result = extract_all(str(query_file_path))
-
-        query_metadata = query_result["metadata"]
-        query_frame_features = query_result["frame_features"]
-        query_frame_vectors = query_result["feature_vectors"]
-
-        query_audio_id = db.insert_audio_file(
-            file_name=query_file_path.name,
-            file_path=str(query_file_path),
-            dataset_type="query",
-            instrument_name=None,
-            duration_seconds=query_metadata.get("duration_seconds"),
-            sample_rate=query_metadata.get("sample_rate"),
-            bit_depth=query_metadata.get("bit_depth"),
-            channels=query_metadata.get("channels"),
-            file_size_bytes=query_metadata.get("file_size_bytes"),
-            file_format=query_metadata.get("file_format", "wav"),
-        )
-
-        db.insert_audio_features(query_audio_id, query_frame_features)
-
         dataset_rows = db.fetch_dataset_features()
 
         votes = vote_instrument_by_nearest_frame(
@@ -109,7 +103,6 @@ def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
             copied_source = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
 
             exported_rows.append({
-                "query_audio_id": query_audio_id,
                 "query_file_name": query_file_path.name,
                 "matched_audio_id": item["matched_audio_id"],
                 "matched_file_name": matched_file_name,
@@ -124,7 +117,6 @@ def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
         save_dicts_to_csv(exported_rows, str(TOP5_RESULTS_CSV))
 
         info = {
-            "query_audio_id": query_audio_id,
             "query_valid_frames": len(query_frame_features),
             "copied_dir": copied_dir,
             "csv_path": str(TOP5_RESULTS_CSV),
@@ -194,8 +186,9 @@ def main() -> None:
         page_icon="🎻",
         layout="wide",
     )
+    ensure_project_folders()
 
-    st.title("🎻 Tìm kiếm tiếng nhạc cụ bộ dây")
+    st.title("Tìm kiếm tiếng nhạc cụ bộ dây")
     st.caption("Frame 0.5s, hop 0.25s, vector 6 chiều, so sánh Euclidean.")
 
     tab_query, tab_build = st.tabs(["Upload file query", "Build dataset"])
@@ -205,7 +198,7 @@ def main() -> None:
 
         uploaded_file = st.file_uploader(
             "Chọn file âm thanh",
-            type=["wav", "mp3", "ogg", "flac", "m4a"],
+            type=["wav"],
         )
 
         if uploaded_file is not None:
@@ -220,10 +213,9 @@ def main() -> None:
 
                 st.success("Tìm kiếm xong.")
 
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Query audio_id", info["query_audio_id"])
-                col2.metric("Valid frames", info["query_valid_frames"])
-                col3.metric("Top K", TOP_K)
+                col1, col2 = st.columns(2)
+                col1.metric("Valid frames", info["query_valid_frames"])
+                col2.metric("Top K", TOP_K)
 
                 st.subheader("Dự đoán nhạc cụ theo frame")
                 show_votes(votes)
@@ -257,10 +249,17 @@ def main() -> None:
         if st.button("Copy data_all và build dataset", type="primary"):
             try:
                 with st.spinner("Đang copy file từ data_all sang dataset theo tên nhạc cụ..."):
-                    copy_data_all_to_dataset()
+                    copy_result = copy_data_all_to_dataset(clear_old_dataset=True)
 
-                st.success("Copy data_all sang dataset xong.")
-
+                if copy_result["success"]:
+                    st.success(
+                        f"Copy data_all sang dataset xong. "
+                        f"Đã copy {copy_result['copied']} file, "
+                        f"sai tên {copy_result['invalid_name']} file."
+                    )
+                else:
+                    st.warning(copy_result["message"])
+                    
                 with st.spinner("Đang trích xuất đặc trưng và lưu vào MySQL..."):
                     result = build_dataset(clear_old_data=clear_old_data)
 

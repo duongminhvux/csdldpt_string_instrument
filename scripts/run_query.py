@@ -96,24 +96,8 @@ def main() -> None:
     try:
         query_result = extract_all(query_file_path)
 
-        query_metadata = query_result["metadata"]
         query_frame_features = query_result["frame_features"]
         query_frame_vectors = query_result["feature_vectors"]
-
-        query_audio_id = db.insert_audio_file(
-            file_name=query_file_name,
-            file_path=query_file_path,
-            dataset_type="query",
-            instrument_name=None,
-            duration_seconds=query_metadata.get("duration_seconds"),
-            sample_rate=query_metadata.get("sample_rate"),
-            bit_depth=query_metadata.get("bit_depth"),
-            channels=query_metadata.get("channels"),
-            file_size_bytes=query_metadata.get("file_size_bytes"),
-            file_format=query_metadata.get("file_format", "wav"),
-        )
-
-        db.insert_audio_features(query_audio_id, query_frame_features)
 
         dataset_rows = db.fetch_dataset_features()
 
@@ -156,7 +140,6 @@ def main() -> None:
         save_dicts_to_csv(exported_rows, str(TOP5_RESULTS_CSV))
 
         print_section("DONE")
-        print(f"Query audio_id: {query_audio_id}")
         print(f"Query valid frames: {len(query_frame_features)}")
         print(f"CSV result saved to: {TOP5_RESULTS_CSV}")
         print(f"Top-{TOP_K} wav files copied from data_all to: {copied_dir}")

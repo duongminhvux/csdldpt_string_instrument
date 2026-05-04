@@ -8,8 +8,12 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_ALL_DIR = BASE_DIR / "data" / "data_all"
 DATASET_DIR = BASE_DIR / "data" / "dataset"
 
-
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
+
+
+def ensure_data_folders() -> None:
+    DATA_ALL_DIR.mkdir(parents=True, exist_ok=True)
+    DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_instrument_name(file_path: Path) -> str | None:
@@ -45,24 +49,44 @@ def get_instrument_name(file_path: Path) -> str | None:
 
     return instrument_name
 
-def copy_data_all_to_dataset():
-    if not DATA_ALL_DIR.exists():
-        print(f"[ERROR] Không tìm thấy folder data_all: {DATA_ALL_DIR}")
-        return
+
+def clear_dataset_folder() -> None:
+    if DATASET_DIR.exists():
+        shutil.rmtree(DATASET_DIR)
 
     DATASET_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def copy_data_all_to_dataset(clear_old_dataset: bool = True) -> dict:
+    ensure_data_folders()
+
+    if clear_old_dataset:
+        clear_dataset_folder()
 
     copied = 0
     skipped = 0
     invalid_name = 0
 
-    for audio_file in DATA_ALL_DIR.iterdir():
-        if not audio_file.is_file():
-            continue
+    audio_files = [
+        item
+        for item in DATA_ALL_DIR.iterdir()
+        if item.is_file() and item.suffix.lower() in AUDIO_EXTENSIONS
+    ]
 
-        if audio_file.suffix.lower() not in AUDIO_EXTENSIONS:
-            continue
+    if not audio_files:
+        message = f"Không có file audio trong folder: {DATA_ALL_DIR}"
+        print(f"[WARNING] {message}")
+        return {
+            "success": False,
+            "message": message,
+            "copied": copied,
+            "skipped": skipped,
+            "invalid_name": invalid_name,
+            "data_all_dir": str(DATA_ALL_DIR),
+            "dataset_dir": str(DATASET_DIR),
+        }
 
+    for audio_file in audio_files:
         instrument_name = get_instrument_name(audio_file)
 
         if instrument_name is None:
@@ -84,6 +108,8 @@ def copy_data_all_to_dataset():
         copied += 1
         print(f"[COPY] {audio_file.name} -> dataset/{instrument_name}/")
 
+    message = "Copy data_all sang dataset xong."
+
     print("\nDONE")
     print(f"Đã copy: {copied} file")
     print(f"Bỏ qua vì đã tồn tại: {skipped} file")
@@ -91,6 +117,16 @@ def copy_data_all_to_dataset():
     print(f"Folder nguồn: {DATA_ALL_DIR}")
     print(f"Folder đích: {DATASET_DIR}")
 
+    return {
+        "success": True,
+        "message": message,
+        "copied": copied,
+        "skipped": skipped,
+        "invalid_name": invalid_name,
+        "data_all_dir": str(DATA_ALL_DIR),
+        "dataset_dir": str(DATASET_DIR),
+    }
+
 
 if __name__ == "__main__":
-    copy_data_all_to_dataset()
+    copy_data_all_to_dataset(clear_old_dataset=True)
