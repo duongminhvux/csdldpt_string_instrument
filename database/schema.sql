@@ -4,12 +4,8 @@ COLLATE utf8mb4_unicode_ci;
 
 USE string_instrument_search;
 
-DROP TABLE IF EXISTS search_results;
-DROP TABLE IF EXISTS search_queries;
 DROP TABLE IF EXISTS audio_features;
 DROP TABLE IF EXISTS audio_files;
-DROP TABLE IF EXISTS instruments;
-
 
 CREATE TABLE audio_files (
     audio_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -17,11 +13,10 @@ CREATE TABLE audio_files (
     file_name VARCHAR(255) NOT NULL,
     file_path TEXT NOT NULL,
 
-    -- dataset: file thuộc bộ dữ liệu gốc
-    -- query: file âm thanh mới dùng để tìm kiếm
-    dataset_type ENUM('dataset', 'query') NOT NULL,
+    -- Chỉ lưu file thuộc bộ dữ liệu gốc.
+    -- File query không lưu vào CSDL, chỉ xử lý tạm trong bộ nhớ.
+    dataset_type ENUM('dataset') NOT NULL DEFAULT 'dataset',
 
-    -- Lưu trực tiếp tên nhạc cụ, không cần bảng instruments riêng
     instrument_name VARCHAR(100) NULL,
 
     duration_seconds FLOAT NULL,
@@ -37,8 +32,6 @@ CREATE TABLE audio_files (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Mỗi file audio được chia thành nhiều frame.
--- Mỗi frame 0.5s là 1 vector 6 chiều.
 CREATE TABLE audio_features (
     feature_id INT AUTO_INCREMENT PRIMARY KEY,
 
