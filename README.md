@@ -1,65 +1,150 @@
-# Hệ CSDL lưu trữ và tìm kiếm tiếng nhạc cụ bộ dây
 
-## 1. Giới thiệu
+# String Instrument Search
 
-Đây là hệ thống lưu trữ và tìm kiếm âm thanh nhạc cụ thuộc bộ dây. Hệ thống cho phép xây dựng bộ dữ liệu âm thanh, trích xuất đặc trưng theo từng frame, lưu đặc trưng vào MySQL và tìm kiếm 5 file âm thanh giống nhất với một file truy vấn đầu vào.
+Hệ thống xây dựng cơ sở dữ liệu lưu trữ đặc trưng âm thanh và tìm kiếm **top 5 file âm thanh giống nhất** với một file truy vấn đầu vào.
 
-Hệ thống sử dụng:
+Pipeline của project được xây dựng đúng theo báo cáo:
 
-- Python
-- MySQL
-- Streamlit
-- Librosa
-- NumPy
-- Pandas
+```text
+data/data_all
+-> đọc metadata file âm thanh
+-> tiền xử lý âm thanh
+-> chia frame 0.5s, hop 0.25s
+-> trích xuất vector đặc trưng 6 chiều
+-> lưu metadata vào audio_files
+-> lưu đặc trưng theo frame vào audio_features
 
-Phương pháp tìm kiếm chính là **Euclidean distance** trên vector đặc trưng âm thanh 6 chiều.
+data/query
+-> lưu tạm file query được upload
+-> trích xuất vector đặc trưng 6 chiều
+-> lấy đặc trưng dataset từ MySQL
+-> chuẩn hóa Z-score
+-> tính Euclidean distance theo frame
+-> sắp xếp tăng dần distance
+-> trả về top 5 file giống nhất
+````
 
----
-
-## 2. Chức năng chính
-
-Hệ thống gồm các chức năng:
-
-1. Tự động copy file âm thanh từ `data/data_all` sang `data/dataset/<tên_nhạc_cụ>`.
-2. Trích xuất đặc trưng âm thanh theo frame.
-3. Lưu metadata và đặc trưng âm thanh vào MySQL.
-4. Upload file âm thanh truy vấn trên giao diện Streamlit.
-5. Tìm kiếm 5 file âm thanh giống nhất với file truy vấn.
-6. Hiển thị kết quả top 5 và cho phép nghe trực tiếp các file kết quả.
+Project **không lưu nhãn nhạc cụ trong database**, **không đoán instrument_name**, **không copy file kết quả**, và **không lưu file query vào database**.
 
 ---
 
-## 3. Cấu trúc thư mục
+---
+
+## 5. Cấu trúc thư mục
 
 ```text
 csdldpt_string_instrument/
 │
 ├── app.py
-├── copy_data.py
 ├── requirements.txt
 ├── README.md
 │
 ├── database/
 │   └── schema.sql
 │
-├── data/
-│   ├── data_all/
-│   ├── dataset/
-│   └── query/
-│
-├── results/
-│   ├── features.csv
-│   ├── top5_results.csv
-│   └── top5_wav/
-│
 ├── scripts/
 │   ├── build_dataset.py
 │   └── run_query.py
 │
-└── src/
-    ├── config.py
-    ├── database_manager.py
-    ├── feature_extraction.py
-    ├── retrieval.py
-    └── utils.py
+├── src/
+│   ├── audio_utils.py
+│   ├── config.py
+│   ├── database_manager.py
+│   ├── feature_extraction.py
+│   ├── retrieval.py
+│   └── utils.py
+│
+├── data/
+│   ├── data_all/
+│   │   ├── banjo_01.wav
+│   │   ├── cello_01.wav
+│   │   └── ...
+│   │
+│   └── query/
+│       └── query_01.wav
+│
+└── results/
+    ├── features.csv
+    └── top5_results.csv
+```
+
+Trong đó:
+
+| Thư mục / file             | Ý nghĩa                              |
+| -------------------------- | ------------------------------------ |
+| `data/data_all`            | Chứa toàn bộ file `.wav` của dataset |
+| `data/query`               | Chứa file query upload tạm thời      |
+| `results/features.csv`     | CSV backup đặc trưng đã trích xuất   |
+| `results/top5_results.csv` | CSV kết quả top 5                    |
+| `database/schema.sql`      | File tạo database và bảng            |
+| `scripts/build_dataset.py` | Script build dataset                 |
+| `scripts/run_query.py`     | Script query bằng terminal           |
+| `app.py`                   | Giao diện Streamlit                  |
+
+---
+
+## 6. Cài đặt môi trường
+
+### 6.1. Tạo môi trường ảo
+
+```bash
+python -m venv venv
+```
+
+Kích hoạt môi trường ảo trên Windows:
+
+```bash
+venv\Scripts\activate
+```
+
+### 6.2. Cài thư viện
+
+```bash
+pip install -r requirements.txt
+```
+
+Nếu thiếu thư viện, có thể cài trực tiếp:
+
+```bash
+pip install librosa soundfile numpy pandas streamlit mysql-connector-python
+```
+
+---
+
+## 7. Cấu hình MySQL
+
+Mở file:
+
+```text
+src/config.py
+```
+
+Sửa thông tin kết nối MySQL:
+
+```python
+DB_CONFIG = {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "string_instrument_search",
+}
+```
+---
+
+## 11. Chạy giao diện Streamlit
+
+Chạy lệnh:
+
+```bash
+streamlit run app.py
+```
+
+Giao diện có 2 tab:
+
+```text
+Upload file query
+Build dataset
+```
+
+

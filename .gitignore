@@ -2,4 +2,5 @@
 .vscode 
 __pycache__
 results/
-data/query/
+data/query/*
+!data/query/.gitkeep

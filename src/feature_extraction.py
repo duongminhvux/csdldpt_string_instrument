@@ -122,9 +122,9 @@ def calc_zero_crossing_rate(frame: np.ndarray) -> float:
         return 0.0
 
     signs = np.sign(frame)
-    crossings = np.where(np.diff(signs) != 0)[0]
+    signs[signs == 0] = 1
 
-    return float(len(crossings) / len(frame))
+    return float(np.sum(np.abs(signs[1:] - signs[:-1])) / (2 * len(frame)))
 
 
 def get_positive_spectrum(frame: np.ndarray, sr: int) -> Tuple[np.ndarray, np.ndarray]:
