@@ -1,5 +1,3 @@
-import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -9,25 +7,19 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR))
 
-from copy_data import copy_data_all_to_dataset
 from scripts.build_dataset import build_dataset
-from src.config import DATA_ALL_ROOT, DATASET_ROOT, DB_CONFIG, QUERY_ROOT, RESULTS_DIR, TOP5_RESULTS_CSV, TOP5_WAV_DIR
+from src.config import DATA_ALL_ROOT, QUERY_ROOT, RESULTS_DIR, TOP5_RESULTS_CSV, DB_CONFIG
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
-from src.retrieval import rank_similar_files, vote_instrument_by_nearest_frame
-from src.utils import ensure_folder_exists, find_file_in_flat_folder, save_dicts_to_csv
+from src.retrieval import rank_similar_files
+from src.utils import ensure_folder_exists, save_dicts_to_csv
 
 
 TOP_K = 5
 
+
 def ensure_project_folders() -> None:
-    for folder in [
-        DATA_ALL_ROOT,
-        DATASET_ROOT,
-        QUERY_ROOT,
-        RESULTS_DIR,
-        TOP5_WAV_DIR,
-    ]:
+    for folder in [DATA_ALL_ROOT, QUERY_ROOT, RESULTS_DIR]:
         Path(folder).mkdir(parents=True, exist_ok=True)
 
 
@@ -43,34 +35,7 @@ def save_uploaded_query_file(uploaded_file) -> Path:
     return query_path
 
 
-def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
-    query_stem = Path(query_file_name).stem
-    output_dir = TOP5_WAV_DIR / query_stem
-
-    ensure_folder_exists(str(output_dir))
-
-    for old_file in output_dir.glob("*.wav"):
-        old_file.unlink()
-
-    for item in top_results:
-        matched_file_name = item["file_name"]
-        src_path = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
-
-        if src_path is None:
-            item["copied_audio_path"] = None
-            continue
-
-        src = Path(src_path)
-        dest_name = f"rank_{item['rank_position']}_{src.name}"
-        dest = output_dir / dest_name
-
-        shutil.copy2(src, dest)
-        item["copied_audio_path"] = str(dest)
-
-    return str(output_dir)
-
-
-def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
+def run_query(query_file_path: Path) -> tuple[list[dict], dict]:
     query_result = extract_all(str(query_file_path))
 
     query_frame_features = query_result["frame_features"]
@@ -82,11 +47,6 @@ def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
     try:
         dataset_rows = db.fetch_dataset_features()
 
-        votes = vote_instrument_by_nearest_frame(
-            query_frame_vectors=query_frame_vectors,
-            dataset_rows=dataset_rows,
-        )
-
         top_results = rank_similar_files(
             query_frame_vectors=query_frame_vectors,
             dataset_rows=dataset_rows,
@@ -94,54 +54,31 @@ def run_query(query_file_path: Path) -> tuple[list[dict], dict, dict]:
             normalize=True,
         )
 
-        copied_dir = copy_top_result_wavs(query_file_path.name, top_results)
-
         exported_rows = []
 
         for item in top_results:
-            matched_file_name = item["file_name"]
-            copied_source = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
-
-            exported_rows.append({
-                "query_file_name": query_file_path.name,
-                "matched_audio_id": item["matched_audio_id"],
-                "matched_file_name": matched_file_name,
-                "matched_file_path_in_db": item["file_path"],
-                "matched_file_path_in_data_all": copied_source,
-                "instrument_name": item.get("instrument_name"),
-                "rank_position": item["rank_position"],
-                "distance_score": item["distance_score"],
-                "copied_wav_dir": copied_dir,
-            })
+            exported_rows.append(
+                {
+                    "query_file_name": query_file_path.name,
+                    "rank": item["rank_position"],
+                    "matched_audio_id": item["matched_audio_id"],
+                    "file_name": item["file_name"],
+                    "file_path": item["file_path"],
+                    "euclidean_distance": item["distance_score"],
+                }
+            )
 
         save_dicts_to_csv(exported_rows, str(TOP5_RESULTS_CSV))
 
         info = {
             "query_valid_frames": len(query_frame_features),
-            "copied_dir": copied_dir,
             "csv_path": str(TOP5_RESULTS_CSV),
         }
 
-        return top_results, votes, info
+        return top_results, info
 
     finally:
         db.close()
-
-
-def show_votes(votes: dict) -> None:
-    if not votes:
-        st.info("Không có kết quả dự đoán nhạc cụ.")
-        return
-
-    rows = [
-        {
-            "Nhạc cụ": label,
-            "Tỷ lệ theo frame (%)": percent,
-        }
-        for label, percent in votes.items()
-    ]
-
-    st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
 def show_top_results(top_results: list[dict]) -> None:
@@ -152,12 +89,14 @@ def show_top_results(top_results: list[dict]) -> None:
     table_rows = []
 
     for item in top_results:
-        table_rows.append({
-            "Rank": item["rank_position"],
-            "File": item["file_name"],
-            "Nhạc cụ": item.get("instrument_name"),
-            "Distance": round(item["distance_score"], 6),
-        })
+        table_rows.append(
+            {
+                "Rank": item["rank_position"],
+                "File name": item["file_name"],
+                "File path": item["file_path"],
+                "Euclidean distance": round(item["distance_score"], 6),
+            }
+        )
 
     st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
 
@@ -166,16 +105,16 @@ def show_top_results(top_results: list[dict]) -> None:
     for item in top_results:
         st.markdown(
             f"**Top {item['rank_position']}: {item['file_name']}**  \n"
-            f"Nhạc cụ: `{item.get('instrument_name')}`  \n"
-            f"Distance: `{item['distance_score']:.6f}`"
+            f"File path: `{item['file_path']}`  \n"
+            f"Euclidean distance: `{item['distance_score']:.6f}`"
         )
 
-        audio_path = item.get("copied_audio_path")
+        audio_path = Path(item["file_path"])
 
-        if audio_path and Path(audio_path).exists():
-            st.audio(audio_path)
+        if audio_path.exists():
+            st.audio(str(audio_path))
         else:
-            st.warning("Không tìm thấy file audio trong data_all để phát.")
+            st.warning("Không tìm thấy file audio theo file_path trong DB.")
 
         st.divider()
 
@@ -183,13 +122,13 @@ def show_top_results(top_results: list[dict]) -> None:
 def main() -> None:
     st.set_page_config(
         page_title="String Instrument Search",
-        page_icon="🎻",
         layout="wide",
     )
+
     ensure_project_folders()
 
     st.title("Tìm kiếm tiếng nhạc cụ bộ dây")
-    st.caption("Frame 0.5s, hop 0.25s, vector 6 chiều, so sánh Euclidean.")
+    st.caption("Frame 0.5s, hop 0.25s, vector 6 chiều, chuẩn hóa Z-score, so sánh Euclidean.")
 
     tab_query, tab_build = st.tabs(["Upload file query", "Build dataset"])
 
@@ -197,7 +136,7 @@ def main() -> None:
         st.header("1. Upload file để tìm top 5")
 
         uploaded_file = st.file_uploader(
-            "Chọn file âm thanh",
+            "Chọn file âm thanh .wav",
             type=["wav"],
         )
 
@@ -207,24 +146,23 @@ def main() -> None:
 
         if st.button("Tìm kiếm top 5", type="primary", disabled=uploaded_file is None):
             try:
-                with st.spinner("Đang trích đặc trưng và so sánh với dữ liệu trong MySQL..."):
+                with st.spinner("Đang lưu file query vào data/query và trích đặc trưng..."):
                     query_path = save_uploaded_query_file(uploaded_file)
-                    top_results, votes, info = run_query(query_path)
+
+                with st.spinner("Đang so sánh với đặc trưng dataset trong MySQL..."):
+                    top_results, info = run_query(query_path)
 
                 st.success("Tìm kiếm xong.")
 
                 col1, col2 = st.columns(2)
-                col1.metric("Valid frames", info["query_valid_frames"])
+                col1.metric("Valid query frames", info["query_valid_frames"])
                 col2.metric("Top K", TOP_K)
 
-                st.subheader("Dự đoán nhạc cụ theo frame")
-                show_votes(votes)
+                st.info(f"File query đã lưu tạm tại: `{query_path}`")
+                st.info(f"CSV kết quả: `{info['csv_path']}`")
 
                 st.subheader("Top 5 giống nhất")
                 show_top_results(top_results)
-
-                st.info(f"CSV kết quả: {info['csv_path']}")
-                st.info(f"Folder wav top 5: {info['copied_dir']}")
 
             except Exception as e:
                 st.error("Có lỗi khi query.")
@@ -233,42 +171,32 @@ def main() -> None:
     with tab_build:
         st.header("2. Build dataset")
 
-        st.write("Quy trình khi bấm nút:")
+        st.write("Quy trình build dataset:")
         st.code(
-            "data/data_all -> copy_data.py -> data/dataset/<ten_nhac_cu>/ -> extract feature -> MySQL",
+            "data/data_all -> extract frame features -> audio_files + audio_features trong MySQL",
             language="text",
         )
 
         st.warning(
-            "Tên file trong data_all nên có dạng: "
-            "`violin_01.wav`, `violin-01.wav`, `dan_tranh_01.wav`, `dan_tranh-01.wav`."
+            "Hệ thống chỉ đọc file .wav trong data/data_all. "
+            "Không lấy instrument_name, không đoán nhạc cụ, không copy file sang data/dataset."
         )
 
         clear_old_data = st.checkbox("Xóa dataset cũ trong database trước khi build", value=True)
 
-        if st.button("Copy data_all và build dataset", type="primary"):
+        if st.button("Build dataset", type="primary"):
             try:
-                with st.spinner("Đang copy file từ data_all sang dataset theo tên nhạc cụ..."):
-                    copy_result = copy_data_all_to_dataset(clear_old_dataset=True)
-
-                if copy_result["success"]:
-                    st.success(
-                        f"Copy data_all sang dataset xong. "
-                        f"Đã copy {copy_result['copied']} file, "
-                        f"sai tên {copy_result['invalid_name']} file."
-                    )
-                else:
-                    st.warning(copy_result["message"])
-                    
-                with st.spinner("Đang trích xuất đặc trưng và lưu vào MySQL..."):
+                with st.spinner("Đang trích xuất đặc trưng frame và lưu vào MySQL..."):
                     result = build_dataset(clear_old_data=clear_old_data)
 
                 if result["success"]:
                     st.success("Build dataset xong.")
+
                     col1, col2 = st.columns(2)
                     col1.metric("Số file audio", result["audio_count"])
                     col2.metric("Số frame feature", result["frame_count"])
-                    st.info(f"CSV feature: {result['csv_path']}")
+
+                    st.info(f"CSV feature: `{result['csv_path']}`")
                 else:
                     st.warning(result["message"])
 
@@ -281,9 +209,8 @@ def main() -> None:
         st.subheader("Đường dẫn hiện tại")
         st.code(
             f"DATA_ALL_ROOT = {DATA_ALL_ROOT}\n"
-            f"DATASET_ROOT  = {BASE_DIR / 'data' / 'dataset'}\n"
-            f"QUERY_ROOT    = {QUERY_ROOT}\n"
-            f"RESULTS_DIR   = {BASE_DIR / 'results'}",
+            f"QUERY_ROOT = {QUERY_ROOT}\n"
+            f"RESULTS_DIR = {RESULTS_DIR}",
             language="text",
         )
 

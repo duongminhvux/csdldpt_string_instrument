@@ -25,7 +25,6 @@ class DatabaseManager:
 
     def connect(self) -> None:
         self.connection = mysql.connector.connect(**self.config)
-
         if self.connection.is_connected():
             print("Connected to MySQL successfully.")
 
@@ -47,14 +46,12 @@ class DatabaseManager:
         commit: bool = False,
     ) -> Any:
         self._ensure_connection()
-
         cursor = self.connection.cursor(dictionary=True)
 
         try:
             cursor.execute(query, params)
 
             result = None
-
             if fetchone:
                 result = cursor.fetchone()
             elif fetchall:
@@ -79,17 +76,21 @@ class DatabaseManager:
         cursor = self.connection.cursor()
 
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE feat
                 FROM audio_features feat
                 INNER JOIN audio_files af ON feat.audio_id = af.audio_id
                 WHERE af.dataset_type = 'dataset'
-            """)
+                """
+            )
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM audio_files
                 WHERE dataset_type = 'dataset'
-            """)
+                """
+            )
 
             self.connection.commit()
             print("Old dataset data cleared successfully.")
@@ -109,7 +110,6 @@ class DatabaseManager:
         try:
             cursor.execute("ALTER TABLE audio_features AUTO_INCREMENT = 1")
             cursor.execute("ALTER TABLE audio_files AUTO_INCREMENT = 1")
-
             self.connection.commit()
             print("AUTO_INCREMENT values reset successfully.")
 
@@ -125,8 +125,7 @@ class DatabaseManager:
         self,
         file_name: str,
         file_path: str,
-        dataset_type: str,
-        instrument_name: Optional[str] = None,
+        dataset_type: str = "dataset",
         duration_seconds: Optional[float] = None,
         sample_rate: Optional[int] = None,
         bit_depth: Optional[int] = None,
@@ -140,7 +139,6 @@ class DatabaseManager:
                 file_name,
                 file_path,
                 dataset_type,
-                instrument_name,
                 duration_seconds,
                 sample_rate,
                 bit_depth,
@@ -149,14 +147,13 @@ class DatabaseManager:
                 file_format,
                 notes
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         params = (
             file_name,
             file_path,
             dataset_type,
-            instrument_name,
             duration_seconds,
             sample_rate,
             bit_depth,
@@ -166,21 +163,21 @@ class DatabaseManager:
             notes,
         )
 
-        self._execute(query, params, commit=True)
+        self._ensure_connection()
+        cursor = self.connection.cursor()
 
-        row = self._execute(
-            """
-            SELECT audio_id
-            FROM audio_files
-            WHERE file_path = %s
-            ORDER BY audio_id DESC
-            LIMIT 1
-            """,
-            (file_path,),
-            fetchone=True,
-        )
+        try:
+            cursor.execute(query, params)
+            self.connection.commit()
+            return int(cursor.lastrowid)
 
-        return row["audio_id"]
+        except Error as e:
+            self.connection.rollback()
+            print(f"Error inserting audio file: {e}")
+            raise
+
+        finally:
+            cursor.close()
 
     def insert_audio_features(
         self,
@@ -219,27 +216,27 @@ class DatabaseManager:
 
         try:
             for item in frame_features:
-                vector_json = json.dumps({
-                    "rms_energy": item.get("rms_energy", 0.0),
-                    "zero_crossing_rate": item.get("zero_crossing_rate", 0.0),
-                    "average_frequency": item.get("average_frequency", 0.0),
-                    "frequency_variation": item.get("frequency_variation", 0.0),
-                    "average_pitch": item.get("average_pitch", 0.0),
-                    "pitch_variation": item.get("pitch_variation", 0.0),
-                }, ensure_ascii=False)
+                vector = {
+                    "rms_energy": float(item.get("rms_energy", 0.0)),
+                    "zero_crossing_rate": float(item.get("zero_crossing_rate", 0.0)),
+                    "average_frequency": float(item.get("average_frequency", 0.0)),
+                    "frequency_variation": float(item.get("frequency_variation", 0.0)),
+                    "average_pitch": float(item.get("average_pitch", 0.0)),
+                    "pitch_variation": float(item.get("pitch_variation", 0.0)),
+                }
 
                 params = (
                     audio_id,
-                    item.get("frame_index"),
-                    item.get("start_time"),
-                    item.get("end_time"),
-                    item.get("rms_energy", 0.0),
-                    item.get("zero_crossing_rate", 0.0),
-                    item.get("average_frequency", 0.0),
-                    item.get("frequency_variation", 0.0),
-                    item.get("average_pitch", 0.0),
-                    item.get("pitch_variation", 0.0),
-                    vector_json,
+                    int(item.get("frame_index", 0)),
+                    float(item.get("start_time", 0.0)),
+                    float(item.get("end_time", 0.0)),
+                    vector["rms_energy"],
+                    vector["zero_crossing_rate"],
+                    vector["average_frequency"],
+                    vector["frequency_variation"],
+                    vector["average_pitch"],
+                    vector["pitch_variation"],
+                    json.dumps(vector, ensure_ascii=False),
                 )
 
                 cursor.execute(query, params)
@@ -260,20 +257,16 @@ class DatabaseManager:
                 af.audio_id,
                 af.file_name,
                 af.file_path,
-                af.instrument_name,
-
                 feat.feature_id,
                 feat.frame_index,
                 feat.start_time,
                 feat.end_time,
-
                 feat.rms_energy,
                 feat.zero_crossing_rate,
                 feat.average_frequency,
                 feat.frequency_variation,
                 feat.average_pitch,
                 feat.pitch_variation
-
             FROM audio_files af
             INNER JOIN audio_features feat ON af.audio_id = feat.audio_id
             WHERE af.dataset_type = 'dataset'
@@ -289,7 +282,6 @@ class DatabaseManager:
                 file_name,
                 file_path,
                 dataset_type,
-                instrument_name,
                 duration_seconds,
                 sample_rate,
                 bit_depth,

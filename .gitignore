@@ -1,6 +1,5 @@
 .venv
 .vscode 
-__pycache__/
+__pycache__
 results/
-data/dataset/
 data/query/

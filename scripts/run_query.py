@@ -1,28 +1,15 @@
 import os
-import shutil
 import sys
 from pathlib import Path
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 
-from src.config import DATA_ALL_ROOT, DB_CONFIG, QUERY_ROOT, TOP5_RESULTS_CSV, TOP5_WAV_DIR
+from src.config import QUERY_ROOT, DB_CONFIG, TOP5_RESULTS_CSV
 from src.database_manager import DatabaseManager
 from src.feature_extraction import extract_all
-from src.retrieval import (
-    print_instrument_votes,
-    print_top_results,
-    rank_similar_files,
-    vote_instrument_by_nearest_frame,
-)
-from src.utils import (
-    ensure_folder_exists,
-    find_file_in_flat_folder,
-    get_file_name,
-    list_audio_files,
-    print_section,
-    save_dicts_to_csv,
-)
+from src.retrieval import rank_similar_files, print_top_results
+from src.utils import list_audio_files, print_section, save_dicts_to_csv
 
 
 TOP_K = 5
@@ -34,79 +21,32 @@ def choose_query_file() -> str:
     if not query_files:
         raise FileNotFoundError(f"No .wav files found in: {QUERY_ROOT}")
 
-    print_section("AVAILABLE QUERY FILES")
+    print_section("QUERY FILES")
 
-    for i, file_path in enumerate(query_files, start=1):
-        print(f"{i}. {file_path}")
+    for idx, file_path in enumerate(query_files, start=1):
+        print(f"{idx}. {Path(file_path).name}")
 
     while True:
-        choice = input("\nChoose query file number: ").strip()
+        choice = input("Choose query file number: ").strip()
 
-        if not choice.isdigit():
-            print("Please enter a valid number.")
-            continue
+        if choice.isdigit():
+            idx = int(choice)
 
-        idx = int(choice)
+            if 1 <= idx <= len(query_files):
+                return query_files[idx - 1]
 
-        if 1 <= idx <= len(query_files):
-            return query_files[idx - 1]
-
-        print("Choice out of range.")
+        print("Invalid choice.")
 
 
-def copy_top_result_wavs(query_file_name: str, top_results: list[dict]) -> str:
-    query_stem = Path(query_file_name).stem
-    output_dir = TOP5_WAV_DIR / query_stem
-
-    ensure_folder_exists(str(output_dir))
-
-    for old_file in output_dir.glob("*.wav"):
-        old_file.unlink()
-
-    for item in top_results:
-        matched_file_name = item["file_name"]
-        src_path = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
-
-        if src_path is None:
-            print(f"Warning: file not found in data_all, skip copy: {matched_file_name}")
-            continue
-
-        src = Path(src_path)
-        dest_name = f"rank_{item['rank_position']}_{src.name}"
-        dest = output_dir / dest_name
-
-        shutil.copy2(src, dest)
-
-    return str(output_dir)
-
-
-def main() -> None:
-    print_section("RUN AUDIO QUERY")
-    print(f"Query root: {QUERY_ROOT}")
-    print(f"Data all root: {DATA_ALL_ROOT}")
-
-    query_file_path = choose_query_file()
-    query_file_name = get_file_name(query_file_path)
-
-    print(f"\nSelected query file: {query_file_name}")
+def run_query(query_file_path: str) -> list[dict]:
+    query_result = extract_all(query_file_path)
+    query_frame_vectors = query_result["feature_vectors"]
 
     db = DatabaseManager(**DB_CONFIG)
     db.connect()
 
     try:
-        query_result = extract_all(query_file_path)
-
-        query_frame_features = query_result["frame_features"]
-        query_frame_vectors = query_result["feature_vectors"]
-
         dataset_rows = db.fetch_dataset_features()
-
-        votes = vote_instrument_by_nearest_frame(
-            query_frame_vectors=query_frame_vectors,
-            dataset_rows=dataset_rows,
-        )
-
-        print_instrument_votes(votes)
 
         top_results = rank_similar_files(
             query_frame_vectors=query_frame_vectors,
@@ -115,37 +55,40 @@ def main() -> None:
             normalize=True,
         )
 
-        print_top_results(top_results)
-
-        copied_dir = copy_top_result_wavs(query_file_name, top_results)
-
         exported_rows = []
 
         for item in top_results:
-            matched_file_name = item["file_name"]
-            copied_source = find_file_in_flat_folder(matched_file_name, str(DATA_ALL_ROOT))
-
-            exported_rows.append({
-                "query_file_name": query_file_name,
-                "matched_audio_id": item["matched_audio_id"],
-                "matched_file_name": matched_file_name,
-                "matched_file_path_in_db": item["file_path"],
-                "matched_file_path_in_data_all": copied_source,
-                "instrument_name": item.get("instrument_name"),
-                "rank_position": item["rank_position"],
-                "distance_score": item["distance_score"],
-                "copied_wav_dir": copied_dir,
-            })
+            exported_rows.append(
+                {
+                    "query_file_name": Path(query_file_path).name,
+                    "rank": item["rank_position"],
+                    "matched_audio_id": item["matched_audio_id"],
+                    "file_name": item["file_name"],
+                    "file_path": item["file_path"],
+                    "euclidean_distance": item["distance_score"],
+                }
+            )
 
         save_dicts_to_csv(exported_rows, str(TOP5_RESULTS_CSV))
 
-        print_section("DONE")
-        print(f"Query valid frames: {len(query_frame_features)}")
-        print(f"CSV result saved to: {TOP5_RESULTS_CSV}")
-        print(f"Top-{TOP_K} wav files copied from data_all to: {copied_dir}")
+        return top_results
 
     finally:
         db.close()
+
+
+def main() -> None:
+    print_section("RUN QUERY TOP 5")
+
+    query_file_path = choose_query_file()
+
+    print(f"Query file: {query_file_path}")
+
+    top_results = run_query(query_file_path)
+
+    print_top_results(top_results)
+
+    print(f"\nResult CSV saved to: {TOP5_RESULTS_CSV}")
 
 
 if __name__ == "__main__":

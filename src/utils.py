@@ -16,19 +16,6 @@ def get_file_name(file_path: str) -> str:
     return os.path.basename(file_path)
 
 
-def get_instrument_name_from_path(file_path: str, dataset_root: str = "data/dataset") -> Optional[str]:
-    normalized_file_path = os.path.normpath(file_path)
-    normalized_dataset_root = os.path.normpath(dataset_root)
-
-    rel_path = os.path.relpath(normalized_file_path, normalized_dataset_root)
-    parts = rel_path.split(os.sep)
-
-    if len(parts) < 2:
-        return None
-
-    return parts[0].lower()
-
-
 def list_audio_files(root_folder: str) -> List[str]:
     audio_files = []
 
@@ -75,8 +62,10 @@ def safe_float(value, default: float = 0.0) -> float:
         return default
 
 
-def find_file_in_flat_folder(file_name: str, folder_path: str) -> Optional[str]:
-    candidate = Path(folder_path) / file_name
-    if candidate.exists() and candidate.is_file():
-        return str(candidate)
+def find_file_in_folder(file_path: str) -> Optional[str]:
+    path = Path(file_path)
+
+    if path.exists() and path.is_file():
+        return str(path)
+
     return None

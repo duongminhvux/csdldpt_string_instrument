@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Any, Dict, List
 
 import numpy as np
@@ -25,6 +24,12 @@ def zscore_normalize(
     query_vectors: List[np.ndarray],
     dataset_vectors: List[np.ndarray],
 ) -> tuple[List[np.ndarray], List[np.ndarray]]:
+    if not query_vectors:
+        raise ValueError("Query file has no valid frame vectors.")
+
+    if not dataset_vectors:
+        raise ValueError("Dataset has no frame features.")
+
     all_vectors = np.vstack(query_vectors + dataset_vectors)
 
     mean = np.mean(all_vectors, axis=0)
@@ -43,24 +48,25 @@ def euclidean_distance(v1: np.ndarray, v2: np.ndarray) -> float:
 
 
 def group_dataset_frames(dataset_rows: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
-    grouped = {}
+    grouped: Dict[int, Dict[str, Any]] = {}
 
     for row in dataset_rows:
-        audio_id = row["audio_id"]
+        audio_id = int(row["audio_id"])
 
         if audio_id not in grouped:
             grouped[audio_id] = {
                 "audio_id": audio_id,
                 "file_name": row["file_name"],
                 "file_path": row["file_path"],
-                "instrument_name": row.get("instrument_name"),
                 "frames": [],
             }
 
-        grouped[audio_id]["frames"].append({
-            "row": row,
-            "vector": build_vector_from_row(row),
-        })
+        grouped[audio_id]["frames"].append(
+            {
+                "row": row,
+                "vector": build_vector_from_row(row),
+            }
+        )
 
     return grouped
 
@@ -114,13 +120,14 @@ def rank_similar_files(
 
         distance_score = float(np.mean(min_distances))
 
-        results.append({
-            "matched_audio_id": audio_id,
-            "file_name": item["file_name"],
-            "file_path": item["file_path"],
-            "instrument_name": item.get("instrument_name"),
-            "distance_score": distance_score,
-        })
+        results.append(
+            {
+                "matched_audio_id": audio_id,
+                "file_name": item["file_name"],
+                "file_path": item["file_path"],
+                "distance_score": distance_score,
+            }
+        )
 
     results.sort(key=lambda x: x["distance_score"])
 
@@ -132,39 +139,6 @@ def rank_similar_files(
     return top_results
 
 
-def vote_instrument_by_nearest_frame(
-    query_frame_vectors: List[np.ndarray],
-    dataset_rows: List[Dict[str, Any]],
-) -> Dict[str, float]:
-    if not query_frame_vectors or not dataset_rows:
-        return {}
-
-    dataset_vectors = [build_vector_from_row(row) for row in dataset_rows]
-    query_vectors_norm, dataset_vectors_norm = zscore_normalize(
-        query_frame_vectors,
-        dataset_vectors,
-    )
-
-    votes = defaultdict(int)
-
-    for qv in query_vectors_norm:
-        distances = [euclidean_distance(qv, dv) for dv in dataset_vectors_norm]
-        best_idx = int(np.argmin(distances))
-
-        label = dataset_rows[best_idx].get("instrument_name") or "unknown"
-        votes[label] += 1
-
-    total = sum(votes.values())
-
-    if total == 0:
-        return {}
-
-    return {
-        label: round(count / total * 100, 2)
-        for label, count in sorted(votes.items(), key=lambda x: x[1], reverse=True)
-    }
-
-
 def print_top_results(top_results: List[Dict[str, Any]]) -> None:
     print("\nTOP 5 FILES GIONG NHAT:")
 
@@ -172,17 +146,6 @@ def print_top_results(top_results: List[Dict[str, Any]]) -> None:
         print(
             f"{item['rank_position']}. "
             f"{item['file_name']} | "
-            f"instrument={item.get('instrument_name')} | "
+            f"path={item['file_path']} | "
             f"distance={item['distance_score']:.6f}"
         )
-
-
-def print_instrument_votes(votes: Dict[str, float]) -> None:
-    print("\nTY LE DU DOAN NHAC CU THEO FRAME:")
-
-    if not votes:
-        print("No vote result.")
-        return
-
-    for label, percent in votes.items():
-        print(f"{label}: {percent}%")
