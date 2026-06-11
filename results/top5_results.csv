@@ -1,6 +1,6 @@
 query_file_name,rank,matched_audio_id,file_name,file_path,euclidean_distance
-cello_052_part2.wav,1,151,cello_052.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\cello_052.wav,0.28822119304767024
-cello_052_part2.wav,2,132,cello_033.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\cello_033.wav,0.34770848430120027
-cello_052_part2.wav,3,119,cello_020.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\cello_020.wav,0.44342546279613787
-cello_052_part2.wav,4,148,cello_049.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\cello_049.wav,0.44711636350705075
-cello_052_part2.wav,5,117,cello_018.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\cello_018.wav,0.45728792594029355
+banjo_06.wav,1,55,banjo_06.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\banjo_06.wav,8.905775220310632e-06
+banjo_06.wav,2,69,banjo_20.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\banjo_20.wav,0.6129662746732886
+banjo_06.wav,3,59,banjo_10.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\banjo_10.wav,0.6135133477774534
+banjo_06.wav,4,67,banjo_18.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\banjo_18.wav,0.6144046905365858
+banjo_06.wav,5,58,banjo_09.wav,D:\Code\test\CSDLDPT\csdldpt_string_instrument\data\data_all\banjo_09.wav,0.6443181417205117
