@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import librosa
 import numpy as np
 import soundfile as sf
+import noisereduce as nr
 
 
 TARGET_SR = 22050
@@ -12,6 +13,10 @@ HOP_DURATION = 0.25
 
 SILENCE_THRESHOLD = 0.01
 SILENCE_RATIO = 0.8
+
+ENABLE_NOISE_REDUCTION = True
+NOISE_SAMPLE_DURATION = 0.5
+NOISE_REDUCTION_STRENGTH = 0.75
 
 VECTOR_KEYS = [
     "rms_energy",
@@ -26,6 +31,33 @@ VECTOR_KEYS = [
 def load_audio(file_path: str, target_sr: int = TARGET_SR) -> Tuple[np.ndarray, int]:
     y, sr = librosa.load(file_path, sr=target_sr, mono=True)
     return y.astype(np.float32), sr
+
+def reduce_background_noise(y: np.ndarray, sr: int) -> np.ndarray:
+    if y is None or len(y) == 0:
+        return np.array([], dtype=np.float32)
+
+    if not ENABLE_NOISE_REDUCTION:
+        return y.astype(np.float32)
+
+    noise_sample_size = int(NOISE_SAMPLE_DURATION * sr)
+
+    if noise_sample_size <= 0 or len(y) < noise_sample_size:
+        return nr.reduce_noise(
+            y=y,
+            sr=sr,
+            stationary=False,
+            prop_decrease=NOISE_REDUCTION_STRENGTH,
+        ).astype(np.float32)
+
+    noise_clip = y[:noise_sample_size]
+
+    return nr.reduce_noise(
+        y=y,
+        sr=sr,
+        y_noise=noise_clip,
+        stationary=True,
+        prop_decrease=NOISE_REDUCTION_STRENGTH,
+    ).astype(np.float32)
 
 
 def normalize_audio(y: np.ndarray) -> np.ndarray:
@@ -220,6 +252,7 @@ def extract_features_from_frame(
 
 def extract_frame_features(file_path: str) -> List[Dict[str, float]]:
     y, sr = load_audio(file_path)
+    y = reduce_background_noise(y, sr)
     y = normalize_audio(y)
 
     all_frames = split_frames(y, sr)
